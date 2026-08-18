@@ -97,10 +97,6 @@ propellant budget, yielding an overall recoverable fraction of **64.5%**.
   and extreme offsets (>110 m), the velocity threshold is 3.00 m/s, whereas
   mid-range offsets (70–110 m) tolerate up to 3.33 m/s. This slight increase
   reflects the coupled position-velocity dynamics inherent to Clohessy-Wiltshire.
-
-#This envelope defines an effective approach corridor: the region of initial
-#relative states (roughly, initial velocity ≲ 3 m/s at close range, ≲ 3.33 m/s
-#farther out) from which docking succeeds within the fuel budget.
 ![FIG 7: 2D robustness envelope](envelope_results.png)
 
 
