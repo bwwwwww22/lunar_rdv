@@ -72,12 +72,12 @@ noise seeds.
 - **Nominal (no constraint):** 100% docking success. Final position
   error averaged 0.095 m (95th percentile 0.181 m, max 0.186 m); final attitude
   error averaged 0.354° (95th percentile 0.603°, max 0.675°).
-- **Propellant-constrained (5000-unit budget):** success dropped to **24.0%**.
-  Propellant use averaged 7309 (max 19447) and thruster saturation reached
-  30.9% in the worst runs. Critically, final position/attitude errors remained
-  nominal in all runs — every failure was propellant exhaustion, not loss of
-  convergence. This isolates propellant and control authority (not stability or
-  estimation) as the bottleneck.
+- **Propellant-constrained:** The same runs, re-scored against a 5000-unit
+  propellant budget, yielded 24.0% success. Propellant use averaged 7309 (max 19447)
+  and thruster saturation reached 30.9% in the worst runs. Critically, final
+  position/attitude errors remained nominal in all runs — every failure was
+  propellant exhaustion, not loss of convergence. This isolates propellant and
+  control authority (not stability or estimation) as the bottleneck.
 ![FIG 6: Monte Carlo histograms](monte_carlo_results.png)
 
 
