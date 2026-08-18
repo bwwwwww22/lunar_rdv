@@ -2,8 +2,10 @@
 error on a grid, run one docking sim per grid point, and map which
 initial conditions succeed within the propellant budget."""
 
+import os
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 
 from src.environment.plant import Plant
 from src.environment.actuators import Actuators
@@ -18,6 +20,7 @@ from src.analysis.monte_carlo import default_ekf_config
 from scripts.run_nominal import build_params
 
 PROPELLANT_BUDGET = 5000.0
+DATA_FILE = "../results/envelope_data.npz"
 
 def make_ic(nominal_x0, pos_offset, vel_offset):
     """Place the chaser pos_offset [m] further out along a fixed direction
@@ -31,7 +34,6 @@ def make_ic(nominal_x0, pos_offset, vel_offset):
     #dtheta = np.deg2rad(att_offset_deg)
     #dq = quat_normalize(np.array([np.cos(dtheta/2), np.sin(dtheta/2), 0, 0]))
     #x0[6:10] = quat_normalize(quat_multiply(x0[6:10], dq))
-
     return x0
 
 def run_one(nominal_x0, pos_offset, vel_offset, params, dock_position,
@@ -74,29 +76,47 @@ def run_one(nominal_x0, pos_offset, vel_offset, params, dock_position,
 
 
 def main():
-    params = build_params()
-    nominal_x0 = np.zeros(13)
-    nominal_x0[0:3] = [50.0, -100.0, 20.0]
-    nominal_x0[6:10] = [1.0, 0.0, 0.0, 0.0]
-    dock_position = np.array([0.0, -5.0, 0.0])
+    # Load cached data if it exists
+    if os.path.exists(DATA_FILE):
+        print(f"Loading cached simulation data from {DATA_FILE}...")
+        data = np.load(DATA_FILE)
+        pos_offsets = data['pos_offsets']
+        vel_offsets = data['vel_offsets']
+        prop_grid = data['prop_grid']
+        succ_grid = data['succ_grid']
+    else:
+        print("No cache found. Run sims...")
+        params = build_params()
+        nominal_x0 = np.zeros(13)
+        nominal_x0[0:3] = [50.0, -100.0, 20.0]
+        nominal_x0[6:10] = [1.0, 0.0, 0.0, 0.0]
+        dock_position = np.array([0.0, -5.0, 0.0])
 
-    # 16x16 grid of position offset (x) vs velocity offset (y)
-    pos_offsets = np.linspace(0, 150, 16)     # along-track position offset
-    vel_offsets = np.linspace(0, 5, 16)       # along-track velocity offset
+        # 16x16 grid of position offset (x) vs velocity offset (y)
+        pos_offsets = np.linspace(0, 150, 16)     # along-track position offset
+        vel_offsets = np.linspace(0, 5, 16)       # along-track velocity offset
 
-    prop_grid = np.zeros((len(vel_offsets), len(pos_offsets)))
-    succ_grid = np.zeros_like(prop_grid, dtype=bool)
+        prop_grid = np.zeros((len(vel_offsets), len(pos_offsets)))
+        succ_grid = np.zeros_like(prop_grid, dtype=bool)
 
-    total = len(pos_offsets) * len(vel_offsets)
-    count = 0
-    for i, vel in enumerate(vel_offsets):        # rows = vel
-        for j, pos in enumerate(pos_offsets):    # cols = pos
-            prop, succ = run_one(nominal_x0, pos, vel, params, dock_position)
-            prop_grid[i, j] = prop
-            succ_grid[i, j] = succ
-            count += 1
-            if count % 16 == 0:
-                print(f"  {count}/{total}")
+        total = len(pos_offsets) * len(vel_offsets)
+        count = 0
+        for i, vel in enumerate(vel_offsets):        # rows = vel
+            for j, pos in enumerate(pos_offsets):    # cols = pos
+                prop, succ = run_one(nominal_x0, pos, vel, params, dock_position)
+                prop_grid[i, j] = prop
+                succ_grid[i, j] = succ
+                count += 1
+                if count % 16 == 0:
+                    print(f"  {count}/{total}")
+
+        # Save data array to disk
+        np.savez(DATA_FILE, 
+                 pos_offsets=pos_offsets, 
+                 vel_offsets=vel_offsets, 
+                 prop_grid=prop_grid, 
+                 succ_grid=succ_grid)
+        print(f"Saved simulation results to {DATA_FILE}")
 
     plot_envelope(pos_offsets, vel_offsets, prop_grid, succ_grid)
 
@@ -129,24 +149,32 @@ def main():
 
 
 def plot_envelope(pos_offsets, vel_offsets, prop_grid, succ_grid):
-    fig, axs = plt.subplots(1, 2, figsize=(8,3), tight_layout=True)
+    fig, axs = plt.subplots(1, 2, figsize=(7,3), tight_layout=True)
 
     im = axs[0].pcolormesh(pos_offsets, vel_offsets, prop_grid,
-                           shading="auto", cmap="viridis")
+                           shading="auto", cmap="rainbow")
+    
+    # Overlay 5000 propellant limit contour line
+    CS = axs[0].contour(pos_offsets, vel_offsets, prop_grid, 
+                        levels=[PROPELLANT_BUDGET], colors='k', linewidths=1.5)
+    axs[0].clabel(CS, inline=True, fmt={PROPELLANT_BUDGET: "5000 limit"}, fontsize=8)
+
     fig.colorbar(im, ax=axs[0], label="propellant proxy")
     axs[0].set_xlabel("initial position offset [m]")
     axs[0].set_ylabel("initial velocity offset [m/s]")
-    axs[0].set_title("Propellant usage")
 
+    binary_cmap = ListedColormap(["#e74c3c", "#2ecc71"])
     axs[1].pcolormesh(pos_offsets, vel_offsets, succ_grid,
-                      shading="auto", cmap="rainbow", vmin=0, vmax=1)
+                      shading="auto", cmap=binary_cmap, vmin=0, vmax=1)
     axs[1].set_xlabel("initial position offset [m]")
     axs[1].set_ylabel("initial velocity offset [m/s]")
-    axs[1].set_title(f"Docking success envelope \n(budget={PROPELLANT_BUDGET:.0f})")
+    axs[1].set_title("Docking success envelope", fontsize=10)
     axs[1].set_box_aspect(1.0)
+    axs[1].text(75, 2, "SUCCESS", color="k", ha="center", va="center", fontsize=8)
+    axs[1].text(75, 4, "FAILED", color="k",ha="center", va="center", fontsize=8)
 
     plt.tight_layout()
-    plt.savefig("results/envelope_results.png", dpi=300, bbox_inches="tight")
+    plt.savefig("results/envelope_results_2.png", dpi=300, bbox_inches="tight")
 
 if __name__ == "__main__":
     main()

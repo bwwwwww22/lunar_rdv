@@ -3,7 +3,7 @@ The 6-DOF closed loop successfully performs autonomous lunar-orbit rendezvous
 and docking. From an initial 100 m relative offset with 10° attitude error,
 the LQR controller drives relative position to the docking setpoint
 ([0, −5, 0] m, Hill frame) and attitude to alignment, with commanded thrust
-decaying to zero at steady state — confirming convergence.
+decaying to zero at steady state, confirming convergence.
 ![FIG 1: nominal docking convergence](nominal_docking_run.png)
 
 ### 2. LQR Tuning
@@ -56,9 +56,9 @@ entire sweep.
 ### 5. Filter Consistency (NEES / NIS)
 Filter consistency was validated against chi-squared bounds (error-state
 dimension = 12):
-- **NIS mean = 11.39** (expected 12), with 95.2% of samples inside the 95%
+- **NIS mean = 11.36** (expected 12), with 95.3% of samples inside the 95%
   confidence interval, confirming the measurement-noise model R is well-tuned.
-- **NEES mean = 8.17** (expected 12), with 86.6% of samples inside the 95% CI, 
+- **NEES mean = 8.44** (expected 12), with 87.5% of samples inside the 95% CI, 
   indicating mild underconfidence: the filter's claimed uncertainty is
   conservatively larger than its actual error.
 ![FIG 5: NEES / NIS consistency](ekf_consistency.png)
@@ -82,28 +82,25 @@ noise seeds.
 
 
 ### 7. Robustness Envelope
-To identify *which* initial conditions are recoverable (complementing the
-statistical MC view), an 8×8 grid over initial position and velocity
-offsets was mapped against the 5000-unit propellant budget,
-yielding an overall recoverable fraction of **70.3%**.
+To identify *which* initial conditions are recoverable, a 16×16 grid
+over initial position and velocity offsets was mapped against the 5000-unit
+propellant budget, yielding an overall recoverable fraction of **64.5%**.
 
 - **Propellant is dominated by initial velocity offset**, not position:
-  consumption ranged from **2152** (near-zero velocity) to **9491** (5 m/s
+  consumption ranged from **2751** (near-zero velocity) to **10020** (5 m/s
   velocity offset), with only weak dependence on position offset.
-- **Velocity is the dominating factor.** All initial velocity offsets
-  **≤ 3.57 m/s** dock successfully within budget across the full tested
-  position range (0–150 m); at **4.29 m/s and above, no position offset
-  succeeds**, the spacecraft always exhausts its propellant killing the
-  initial velocity.
-- **Non-monotonic in position.** The maximum recoverable velocity
-  *increases* with position offset: at small offsets (<50 m) the limit is
-  **2.86 m/s**, rising to **3.57 m/s** for larger offsets. Larger along-track
-  offsets thus tolerate higher initial velocity, a counterintuitive result
-  reflecting the coupled position–velocity structure of CW relative motion.
+- **Velocity thresholding**: All initial velocity offsets ≤ 3.00 m/s dock
+  successfully within budget across the full tested position range (0–150 m).
+  Above 3.33 m/s, no initial position offset yields a successful run.
+- **Non-monotonic in position**: the maximum recoverable velocity slightly 
+  increases in the mid-range position offset region. At small offsets (<70 m)
+  and extreme offsets (>110 m), the velocity threshold is 3.00 m/s, whereas
+  mid-range offsets (70–110 m) tolerate up to 3.33 m/s. This slight increase
+  reflects the coupled position-velocity dynamics inherent to Clohessy-Wiltshire.
 
 #This envelope defines an effective approach corridor: the region of initial
-#relative states (roughly, initial velocity ≲ 3 m/s at close range, ≲ 3.6 m/s
-#farther out) from which autonomous docking succeeds within the fuel budget.
+#relative states (roughly, initial velocity ≲ 3 m/s at close range, ≲ 3.33 m/s
+#farther out) from which docking succeeds within the fuel budget.
 ![FIG 7: 2D robustness envelope](envelope_results.png)
 
 
@@ -116,14 +113,14 @@ nominal error once measurements resume: for dropouts from 300 s up to 2000 s
 (with recovery time available), final docking error stayed within ~0.5 m and
 ~0.6°, and docking succeeded in every case. As an example, a 300 s dropout let
 estimation error drift from its ~0.03 m / ~0.16° nominal level to a peak of
-2.52 m / 5.87° during the outage, then snap back to nominal (0.044 m / 0.503°)
+6.30 m / 9.63° during the outage, then snap back to nominal (0.055 m / 0.459°)
 after measurements returned.
 
 The sweep also caught a subtle test artifact. An early run showed a 2000 s
-dropout failing badly (14.6 m, 37° final error), but that dropout ran to the
+dropout failing badly (33.8 m, 61° final error), but that dropout ran to the
 very end of the docking window, so measurements never came back before docking.
 Re-running the same 2000 s dropout earlier, so measurements resumed with time to
-spare, docked cleanly (0.045 m, 0.048°). So the real limit isn't how long the
+spare, docked cleanly (0.054 m, 0.276°). So the real limit isn't how long the
 filter can coast, it's whether measurements return early enough to re-converge
 before docking. This distinction only showed up because the first-pass result
 was double-checked rather than taken at face value.
