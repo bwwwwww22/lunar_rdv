@@ -1,5 +1,4 @@
-"""Propagation w/ zero control (just dynamics).
-For verification, not the final runner."""
+"""Propagation w/ zero control (just dynamics). For verification"""
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -57,7 +56,7 @@ def main():
     plt.plot(x_hist[:, 1], x_hist[:, 0])  # y (along-track) vs x (radial)
     plt.xlabel("along-track y [m]"); plt.ylabel("radial x [m]")
     plt.title("CW relative motion (should be a closed ellipse)")
-    plt.axis("equal"); plt.grid(True)
+    plt.axis("equal");
 
     # Quaternion norm over time
     qnorm = np.linalg.norm(x_hist[:, 6:10], axis=1)
@@ -65,7 +64,6 @@ def main():
     plt.plot(t_hist, qnorm - 1.0)
     plt.xlabel("time [s]"); plt.ylabel("‖q‖ − 1")
     plt.title("Quaternion norm error (should stay ~0)")
-    plt.grid(True)
 
     plt.show()
 

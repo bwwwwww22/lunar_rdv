@@ -63,8 +63,12 @@ def main():
 
     # Docking target setpoint (Hill)
     dock_position = np.array([0.0, -5.0, 0.0])  # dock 5 m along-track behind (same radial altitude & cross-track plane as target)
-
-    # for EKF init estimate, start with a small error from the truth
+    
+    # --- EKF initial estimate: a further small offset from the dispersed truth
+    # simulates real-life uncertainty at initialization: the EKF does not 
+    # know the exact true position of the spacecraft right at t=0; 
+    # it starts with a small initial estimate error (up to 0.5 m) and relies on
+    # its measurement updates to converge
     x0_est = x0.copy()
     x0_est[0:3] += np.array([0.5, -0.5, 0.3])
 
@@ -73,7 +77,7 @@ def main():
     sensor = PoseSensor(pos_noise_std=pos_std, vel_noise_std=vel_std,
                         att_noise_std=att_std,
                         rate_noise_std=rate_std, seed=42)
-    nav = EKFNav(P0, x0_est, Q_ekf, R_ekf)
+    nav = EKFNav(params, x0_est, P0, Q_ekf, R_ekf)
     guidance = Guidance(dock_position=dock_position)
     controller = LQRController(params, Q_trans, R_trans, Q_att, R_att)
     scheduler = Scheduler(dt=1.0)
@@ -97,7 +101,7 @@ def plot_ekf_performance(log):
     vel_err = np.linalg.norm(est[:, 3:6] - truth[:, 3:6], axis=1)
     rate_err = np.linalg.norm(est[:, 10:13] - truth[:, 10:13], axis=1)
 
-    # Attitude error via quaternion residual → small-angle vector norm
+    # Attitude error via quaternion residual (small-angle vector norm
     from src.utils.quaternions import quat_error
     att_err = np.array([
         np.linalg.norm(quat_error(est[k, 6:10], truth[k, 6:10]))
