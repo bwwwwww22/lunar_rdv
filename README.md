@@ -1,4 +1,4 @@
-# 6-DOF SIL Simulator for Lunar Rendezvous & Docking
+# Simplified 6-DOF SIL Simulator for Lunar Rendezvous & Docking
 A closed-loop 6-DOF SIL Python simulator for spacecraft proximity
 operations and docking in lunar orbit. Modular architecture isolates the
 vehicle physics plant from the GN&C flight software. Core focus: a
@@ -20,7 +20,6 @@ robustness analysis.
 
 A SIL boundary is enforced between the environment (truth) and the flight
 software (which sees only noisy sensor data):
-
     PLANT (truth) → SENSOR (adds noise) → NAV (EKF estimate) → GUIDANCE (setpoint)
       → CONTROL (LQR) → ACTUATORS (saturation) → PLANT (next step)
 
@@ -73,4 +72,4 @@ attitude error. Corrections are injected multiplicatively into the quaternion.
   maps quaternion perturbations to small-angle perturbations
 - **Process noise** is applied in error-state space, weighted primarily on the
   velocity and angular-rate channels (representing unmodeled accelerations and
-  torques); position/attitude blocks inherit uncertainty through integration.
+  torques).
