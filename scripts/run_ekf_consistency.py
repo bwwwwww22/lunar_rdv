@@ -17,6 +17,7 @@ from src.fsw.control import LQRController
 from src.environment.actuators import Actuators
 from src.analysis.consistency import nees, nis, chi2_bounds
 from scripts.run_nominal import build_params
+from src.utils.quaternions import quat_multiply, quat_normalize
 
 
 def run_with_consistency_logging(t_end=3000.0, dt=1.0, seed=42, q_scale=0.01):
@@ -60,7 +61,14 @@ def run_with_consistency_logging(t_end=3000.0, dt=1.0, seed=42, q_scale=0.01):
     controller = LQRController(params, Q_trans, R_trans, Q_att, R_att)
 
     x0_est = x0.copy()
-    x0_est[0:3] += [0.5, -0.5, 0.3]
+    x0_est[0:3]   += np.array([1.0, -1.0, 1.0])
+    x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
+    x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
+    dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
+    dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+    dq = quat_normalize(dq)
+    x0_est[6:10] = quat_normalize(quat_multiply(x0_est[6:10], dq))
+
     ekf = MEKF(params, x0_est, P0, Q_base * q_scale, R_ekf)
 
     n_steps = int(t_end / dt)

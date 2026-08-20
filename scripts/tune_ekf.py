@@ -17,7 +17,7 @@ from src.sim.scheduler import Scheduler
 from src.sim.runner import SimRunner
 from src.utils.quaternions import quat_error
 from scripts.run_nominal import build_params
-
+from src.utils.quaternions import quat_multiply, quat_normalize
 
 def base_P0():
     return np.diag([
@@ -67,7 +67,13 @@ def run_one(params, q_scale, seed=42, dt=1.0, t_end=3000.0):
     sensor = PoseSensor(pos_std, vel_std, att_std, rate_std, seed=seed)
 
     x0_est = x0.copy()
-    x0_est[0:3] += [0.5, -0.5, 0.3]
+    x0_est[0:3]   += np.array([1.0, -1.0, 1.0])
+    x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
+    x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
+    dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
+    dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+    dq = quat_normalize(dq)
+    x0_est[6:10] = quat_normalize(quat_multiply(x0_est[6:10], dq))
 
     # pass different q_scale values for Q into the EKF initialization
     nav = EKFNav(params, x0_est, base_P0(), base_Q() * q_scale,

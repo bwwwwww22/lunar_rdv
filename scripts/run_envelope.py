@@ -51,7 +51,13 @@ def run_one(nominal_x0, pos_offset, vel_offset, params, dock_position,
 
     x0 = make_ic(nominal_x0, pos_offset, vel_offset)
     x0_est = x0.copy()
-    x0_est[0:3] += [0.5, -0.5, 0.3]
+    x0_est[0:3]   += np.array([1.0, -1.0, 1.0])
+    x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
+    x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
+    dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
+    dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+    dq = quat_normalize(dq)
+    x0_est[6:10] = quat_normalize(quat_multiply(x0_est[6:10], dq))
 
     plant = Plant(params, x0)
     actuators = Actuators(max_force=10.0, max_torque=5.0)

@@ -79,13 +79,15 @@ def run_single(seed, nominal_x0, params, dock_position, t_end=3000.0, dt=1.0,
     x0_truth = (sample_dispersed_x0(rng, nominal_x0) if disperse_ic
                 else nominal_x0.copy())
 
-    # --- EKF initial estimate: a further small offset from the dispersed truth
-    # simulates real-life uncertainty at initialization: the EKF does not 
-    # know the exact true position of the spacecraft right at t=0; 
-    # it starts with a small initial estimate error (up to 0.5 m) and relies on
-    # its measurement updates to converge
+    # EKF initial estimate
     x0_est = x0_truth.copy()
-    x0_est[0:3] += rng.normal(0, 0.5, 3)
+    x0_est[0:3]   += np.array([1.0, -1.0, 1.0])
+    x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
+    x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
+    dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
+    dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+    dq = quat_normalize(dq)
+    x0_est[6:10] = quat_normalize(quat_multiply(x0_est[6:10], dq))
 
     plant = Plant(params, x0_truth)
     actuators = Actuators(max_force=10.0, max_torque=5.0)

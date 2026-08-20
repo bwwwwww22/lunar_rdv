@@ -1,5 +1,4 @@
-"""Fixed-rate scheduler. Assumes single-rate (sensor, nav, control all at the
-same dt). Will add multi_rate hooks (e.g. fast IMU, slow camera) later"""
+"""Fixed-rate scheduler. Assumes single-rate (sensor, nav, ctrl) are all at the same dt"""
 
 class Scheduler:
     def __init__(self, dt, control_decimation=1, sensor_decimation=1):

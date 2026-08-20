@@ -1,7 +1,7 @@
 """LQR flight controller. Designs two decoupled LQR gains (translation +
 attitude) about the docking setpoint, then computes u = -K (x - x_ref).
 
-Translation(Clohessy-Wiltshire) is linear.
+Translation (Clohessy-Wiltshire) is linear.
 Attitude model is linearized about the target attitude (small-angle)."""
 
 import numpy as np

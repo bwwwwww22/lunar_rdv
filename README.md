@@ -62,9 +62,8 @@ attitude error. Corrections are injected multiplicatively into the quaternion.
 ## Control
 - Decoupled LQR for translation and attitude, designed via continuous-time
   algebraic Riccati equation
-- Stability margins: the classical guaranteed margins (≥6 dB gain, ≥60° phase)
-  weaken under discrete sampling and EKF-based estimation, so robustness is
-  verified via Monte Carlo.
+- The (continuous full-state) stability margins would weaken under discrete sampling
+  and the LQR+EKF combination. Robustness is therefore verified via Monte Carlo.
 
 ## Navigation
 - **Multiplicative EKF** with a 12-dim error state, avoiding the singular

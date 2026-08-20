@@ -45,7 +45,21 @@ def run_with_dropout(dropout_windows, t_end=3000.0, dt=1.0, seed=42):
     sensor = DropoutSensor(base_sensor, dropout_windows, dt=dt)
 
     x0_est = x0.copy()
-    x0_est[0:3] += [0.5, -0.5, 0.3]
+    #x0_est[0:3] += [0.5, -0.5, 0.3]
+    # Position: 1.0 m per axis (matches P0 = 1.0 m²)
+    x0_est[0:3]   += np.array([1.0, -1.0, 1.0])
+    # Velocity: 0.316 m/s per axis (matches P0 = 0.1 (m/s)²)
+    x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
+    # Angular rate: 0.1 deg/s per axis (matches P0 = deg2rad(0.1)²)
+    x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
+    # Attitude: 5 deg per axis (matches P0 = deg2rad(5)²)
+    # Apply MULTIPLICATIVELY (not additively — attitude trap)
+    from src.utils.quaternions import quat_multiply, quat_normalize
+    dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
+    dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+    dq = quat_normalize(dq)
+    x0_est[6:10] = quat_normalize(quat_multiply(x0_est[6:10], dq))
+    
     nav = EKFNav(params, x0_est, P0, Q_ekf, R_ekf)
 
     guidance = Guidance(dock_position=dock_position)

@@ -12,13 +12,15 @@ from src.fsw.control import LQRController
 from src.sim.scheduler import Scheduler
 from src.sim.runner import SimRunner
 from scripts.run_openloop import build_params
+from src.utils.quaternions import quat_multiply, quat_normalize
 
 def main():
     params = build_params()
 
     # --- LQR tuning matrices
     # arbitrary values but this Q setting (penalizes state error) has position weighted 
-    # 10× more than velocity, meaningwe care more about being at the dock than about Rthe exact speed
+    # 10× more than velocity, meaningwe we care more about being at the dock
+    # than about the exact speed
     Q_trans = np.diag([1.0, 1.0, 1.0,    # position error (x,y,z)
                        0.1, 0.1, 0.1])   # velocity error (vx,vy,vz)
     R_trans = np.diag([1.0, 1.0, 1.0]) * 10.0    # thrust cost; bigger = stingier with fuel
@@ -26,10 +28,10 @@ def main():
     R_att   = np.diag([1.0, 1.0, 1.0]) * 100.0   # make using torque very expensive
 
     # --- EKF tuning, [δr(3), δv(3), δθ(3), δω(3)]
-    # sort of arbitrary, but the idea is that we have a good handle on the translational state
-    # (position & velocity) and worse on the attitude (small-angle error) and angular rate
-    # The process noise is set to be small for position and attitude, 
-    # and larger for velocity and angular rate, which are the primary channels of uncertainty.
+    # sort of arbitrary, but i assume moderate spatial error, tighter confidence in
+    # initial angular rate, looser on initial attitude
+    # The process noise is set to be small for position and attitude, and larger
+    # for velocity and angular rate, which are the primary channels of uncertainty.
     P0 = np.diag([
         1.0, 1.0, 1.0,               # initial pos uncertainty (m^2)
         0.1, 0.1, 0.1,               # velocity  (m/s)^2
@@ -70,7 +72,20 @@ def main():
     # it starts with a small initial estimate error (up to 0.5 m) and relies on
     # its measurement updates to converge
     x0_est = x0.copy()
-    x0_est[0:3] += np.array([0.5, -0.5, 0.3])
+
+    # Position: 1.0 m per axis (matches P0 = 1.0 m²)
+    x0_est[0:3]   += np.array([1.0, -1.0, 1.0])
+    # Velocity: 0.316 m/s per axis (matches P0 = 0.1 (m/s)²)
+    x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
+    # Angular rate: 0.1 deg/s per axis (matches P0 = deg2rad(0.1)²)
+    x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
+
+    # Attitude: 5 deg per axis (matches P0 = deg2rad(5)²)
+    # Apply MULTIPLICATIVELY (not additively — attitude trap)
+    dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
+    dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+    dq = quat_normalize(dq)
+    x0_est[6:10] = quat_normalize(quat_multiply(x0_est[6:10], dq))
 
     plant = Plant(params, x0)
     actuators = Actuators(max_force=10.0, max_torque=5.0)
