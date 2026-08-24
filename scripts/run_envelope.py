@@ -32,8 +32,8 @@ def make_ic(nominal_x0, pos_offset, vel_offset):
 
     # Attitude error about body x-axis
     #dtheta = np.deg2rad(att_offset_deg)
-    #dq = quat_normalize(np.array([np.cos(dtheta/2), np.sin(dtheta/2), 0, 0]))
-    #x0[6:10] = quat_normalize(quat_multiply(x0[6:10], dq))
+    #dq = quat_normalize(np.array([np.sin(dtheta/2), 0, 0, np.cos(dtheta/2)]))
+    #x0[6:10] = quat_normalize(quat_multiply(dq, x0[6:10]))
     return x0
 
 def run_one(nominal_x0, pos_offset, vel_offset, params, dock_position,
@@ -55,9 +55,9 @@ def run_one(nominal_x0, pos_offset, vel_offset, params, dock_position,
     x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
     x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
     dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
-    dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+    dq = np.array([0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2], 1.0])
     dq = quat_normalize(dq)
-    x0_est[6:10] = quat_normalize(quat_multiply(x0_est[6:10], dq))
+    x0_est[6:10] = quat_normalize(quat_multiply(dq, x0_est[6:10]))
 
     plant = Plant(params, x0)
     actuators = Actuators(max_force=10.0, max_torque=5.0)
@@ -73,7 +73,7 @@ def run_one(nominal_x0, pos_offset, vel_offset, params, dock_position,
     truth = log["x_truth"]
     final_pos_err = np.linalg.norm(truth[-1, 0:3] - dock_position)
     final_att_err = np.rad2deg(np.linalg.norm(
-        quat_error(truth[-1, 6:10], np.array([1, 0, 0, 0]))))
+        quat_error(truth[-1, 6:10], np.array([0, 0, 0, 1]))))
     propellant = np.sum(np.abs(log["u_applied"][:, 0:3])) * dt
 
     success = (final_pos_err < 1.0 and final_att_err < 5.0
@@ -95,7 +95,7 @@ def main():
         params = build_params()
         nominal_x0 = np.zeros(13)
         nominal_x0[0:3] = [50.0, -100.0, 20.0]
-        nominal_x0[6:10] = [1.0, 0.0, 0.0, 0.0]
+        nominal_x0[6:10] = [0.0, 0.0, 0.0, 1.0]
         dock_position = np.array([0.0, -5.0, 0.0])
 
         # 16x16 grid of position offset (x) vs velocity offset (y)

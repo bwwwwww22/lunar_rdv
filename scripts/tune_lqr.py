@@ -27,7 +27,7 @@ def run_one(params, R_scale, dt=1.0, t_end=3000.0):
 
     x0 = np.zeros(13)
     x0[0:3] = [50.0, -100.0, 20.0]
-    x0[6:10] = [0.9962, 0.0872, 0.0, 0.0]
+    x0[6:10] = [0.0872, 0.0, 0.0, 0.9962]
     dock_position = np.array([0.0, -5.0, 0.0])
 
     plant = Plant(params, x0)

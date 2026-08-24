@@ -5,7 +5,7 @@ Rotation:    rigid-body Euler
 State x (13,):
     [0:3]  r   relative position (Hill) [m]
     [3:6]  v   relative velocity (Hill) [m/s]
-    [6:10] q   attitude quaternion (body->ref), scalar-first
+    [6:10] q   attitude quaternion (ref->body, JPL passive), scalar-last [x,y,z,w]
     [10:13] w  angular velocity (body) [rad/s]
 
 Control u (6,):

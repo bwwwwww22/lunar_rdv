@@ -98,7 +98,7 @@ class LQRController:
         # --- Attitude error (small-angle vector, NOT quaternion subtraction!) ---
         q_est = x_est[6:10]
         q_ref = x_ref[6:10]
-        dtheta = quat_error(q_est, q_ref)      # (3,) small-angle error; q_err = q_ref * q_est^-1
+        dtheta = quat_error(q_est, q_ref)      # (3,) small-angle error; q_err = q_est ⊗ q_ref^-1
         w_err = x_est[10:13] - x_ref[10:13]
         e_att = np.concatenate([dtheta, w_err])
         tau = -self.K_att @ e_att

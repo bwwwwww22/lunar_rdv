@@ -30,7 +30,7 @@ def main():
     x0 = np.zeros(13)
     x0[0:3] = [50.0, -100.0, 20.0]   # position (Hill); start 100 m behind, offset radial/cross
     #x0[3:6] = [0.0, 0.0, 0.0]        # velocity (Hill)
-    x0[6:10] = [0.9962, 0.0872, 0.0, 0.0]  # quaternion (attitude body→ref, scalar-first); here ~10 deg roll error
+    x0[6:10] = [0.0872, 0.0, 0.0, 0.9962]  # quaternion (attitude ref→body, JPL scalar-last); here ~10 deg roll error
     x0[10:13] = [0.0, 0.0, 0.0]      # body-frame angular rate
 
     # Docking target setpoint (Hill)
@@ -52,7 +52,7 @@ def main():
     log = sim.run(t_end=3000.0)
 
     final_truth = log["x_truth"][-1]        # last timestep truth state
-    dock_attitude = np.array([1.0, 0.0, 0.0, 0.0])
+    dock_attitude = np.array([0.0, 0.0, 0.0, 1.0])
 
     # Position error
     pos_err = final_truth[0:3] - dock_position
@@ -130,7 +130,6 @@ def plot_results(log, dock_position):
     ax_ctrl.set_box_aspect(1.0)
 
     plt.savefig("results/nominal_docking_run.png", dpi=300, bbox_inches="tight")
-    #plt.show()
 
 
 if __name__ == "__main__":

@@ -5,11 +5,11 @@ import numpy as np
 
 class Guidance:
     def __init__(self, dock_position, dock_attitude=None):
-        """dock_position: (3,) target relative position at dock [m] (Hill frame)
-        dock_attitude: (4,) target attitude quaternion (defaults to identity)"""
+        """dock_position: (3,) tgt relative position at dock [m]
+        dock_attitude: (4,) tgt attitude quaternion, scalar-last [x,y,z,w] (defaults to identity)"""
         self.dock_position = np.asarray(dock_position, dtype=float)
         if dock_attitude is None:
-            dock_attitude = np.array([1.0, 0.0, 0.0, 0.0])
+            dock_attitude = np.array([0.0, 0.0, 0.0, 1.0])
         self.dock_attitude = np.asarray(dock_attitude, dtype=float)
 
     def reference(self, t, x_est):

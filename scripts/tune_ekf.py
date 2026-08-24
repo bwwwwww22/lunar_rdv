@@ -59,7 +59,7 @@ def run_one(params, q_scale, seed=42, dt=1.0, t_end=3000.0):
 
     x0 = np.zeros(13)
     x0[0:3] = [50.0, -100.0, 20.0]
-    x0[6:10] = [0.9962, 0.0872, 0.0, 0.0]
+    x0[6:10] = [0.0872, 0.0, 0.0, 0.9962]
     dock_position = np.array([0.0, -5.0, 0.0])
 
     plant = Plant(params, x0)
@@ -71,9 +71,9 @@ def run_one(params, q_scale, seed=42, dt=1.0, t_end=3000.0):
     x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
     x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
     dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
-    dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+    dq = np.array([0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2], 1.0])
     dq = quat_normalize(dq)
-    x0_est[6:10] = quat_normalize(quat_multiply(x0_est[6:10], dq))
+    x0_est[6:10] = quat_normalize(quat_multiply(dq, x0_est[6:10]))
 
     # pass different q_scale values for Q into the EKF initialization
     nav = EKFNav(params, x0_est, base_P0(), base_Q() * q_scale,

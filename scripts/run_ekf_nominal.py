@@ -60,7 +60,7 @@ def main():
     x0 = np.zeros(13)
     x0[0:3] = [50.0, -100.0, 20.0]   # position (Hill); start 100 m behind, offset radial/cross
     #x0[3:6] = [0.0, 0.0, 0.0]        # velocity (Hill)
-    x0[6:10] = [0.9962, 0.0872, 0.0, 0.0]  # quaternion (attitude body→ref, scalar-first); here ~10 deg roll error
+    x0[6:10] = [0.0872, 0.0, 0.0, 0.9962]  # quaternion (attitude ref→body, JPL scalar-last); here ~10 deg roll error
     x0[10:13] = [0.0, 0.0, 0.0]      # body-frame angular rate
 
     # Docking target setpoint (Hill)
@@ -83,9 +83,9 @@ def main():
     # Attitude: 5 deg per axis (matches P0 = deg2rad(5)²)
     # Apply MULTIPLICATIVELY (not additively — attitude trap)
     dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
-    dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+    dq = np.array([0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2], 1.0])
     dq = quat_normalize(dq)
-    x0_est[6:10] = quat_normalize(quat_multiply(x0_est[6:10], dq))
+    x0_est[6:10] = quat_normalize(quat_multiply(dq, x0_est[6:10]))
 
     plant = Plant(params, x0)
     actuators = Actuators(max_force=10.0, max_torque=5.0)

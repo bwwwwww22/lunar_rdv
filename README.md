@@ -33,8 +33,8 @@ software (which sees only noisy sensor data):
 ## Conventions
 - **Frames:** translation in Hill/LVLH frame (x=radial, y=along-track,
   z=cross-track); rotation in body frame.
-- **Quaternions:** scalar-first `[w, x, y, z]`, Hamilton convention,
-  body-relative-to-reference (not JPL).
+- **Quaternions:** scalar-last `[x, y, z, w]`, JPL convention, passive transform
+  from reference to chaser body: `v_body = R(q) @ v_ref`.
 - **Units:** meters, seconds, radians, kilograms
 
 ## State vector (13) and error state (12)
@@ -45,7 +45,7 @@ The full state carries a 4-component quaternion; the EKF operates on a
 |-------|--------|---------|-------|-------|
 | 0:3   | r      | relative position | Hill | m |
 | 3:6   | v      | relative velocity | Hill | m/s |
-| 6:10  | q      | attitude quaternion (body→ref) | — | — |
+| 6:10  | q      | attitude quaternion (ref→body, passive) | — | — |
 | 10:13 | ω      | angular velocity | body | rad/s |
 
 Error state (12): `[δr(3), δv(3), δθ(3), δω(3)]`, where δθ is a small-angle
@@ -55,7 +55,7 @@ attitude error. Corrections are injected multiplicatively into the quaternion.
 - **Translation:** Clohessy–Wiltshire equations, lunar mean motion
   `n = √(µ_moon / a³)` for a 100 km circular low lunar orbit. No atmospheric drag.
 - **Rotation:** rigid-body Euler equation `I·ω̇ = τ − ω×(I·ω)` with quaternion
-  kinematics `q̇ = ½ q ⊗ [0, ω]`.
+  kinematics `q̇ = ½ [ω, 0] ⊗ q` (JPL left-multiplication).
 - **Integration:** fixed-step RK4
 
 ## Control

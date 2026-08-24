@@ -43,14 +43,14 @@ class MEKF:
         self.x[3:6]   += dx[3:6]     # velocity: additive
         self.x[10:13] += dx[9:12]     # angular rate: additive
 
-        # Attitude: multiplicative. dq ≈ [1, δθ/2], then q̂ = q̂ ⊗ dq
+        # Attitude: multiplicative. dq ≈ [δθ/2, 1] (scalar-last), then q̂ = dq ⊗ q̂
         dtheta = dx[6:9]
-        dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+        dq = np.array([0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2], 1.0])
         dq = quat_normalize(dq)
-        
-        # q̂ = q̂ ⊗ dq
-        # right-multiplication means attitude error is defined in the body frame
-        self.x[6:10] = quat_normalize(quat_multiply(self.x[6:10], dq))
+
+        # q̂ = dq ⊗ q̂
+        # left-multiplication (JPL) injects the correction as a body-frame rotation
+        self.x[6:10] = quat_normalize(quat_multiply(dq, self.x[6:10]))
 
     def get_estimate(self):
         return self.x.copy()
@@ -212,8 +212,8 @@ def _rk4_step_estimate(x, u, dt, params):
 def _error_state_derivative(x, u, params):
     """Compute the 12-dim error-state derivative from the 13-dim full-state
     derivative (from dynamics.state_derivative). Positions/velocities/rates 
-    map directly; the quaternion derivative maps to a small-angle rate via 
-    q̇ = ½ q ⊗ [0, ω]  →  δθ̇ ≈ ω."""
+    map directly; the quaternion derivative maps to a small-angle rate via
+    q̇ = ½ [ω, 0] ⊗ q  →  δθ̇ ≈ ω."""
     from src.environment.dynamics import state_derivative
     xdot = state_derivative(x, u, params)
     dx = np.zeros(12)
@@ -233,9 +233,9 @@ def _perturb_full_state(x, i, eps):
         xp[i] += eps
     elif i < 9:                   # attitude: multiplicative small rotation
         dtheta = np.zeros(3); dtheta[i - 6] = eps
-        dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+        dq = np.array([0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2], 1.0])
         dq /= np.linalg.norm(dq)
-        xp[6:10] = quat_multiply(xp[6:10], dq)
+        xp[6:10] = quat_multiply(dq, xp[6:10])
         xp[6:10] /= np.linalg.norm(xp[6:10])
     else:                         # angular rate: additive
         xp[10 + (i - 9)] += eps   # shift index range from 9:12 to 10:13

@@ -14,7 +14,7 @@ def main():
 
     nominal_x0 = np.zeros(13)
     nominal_x0[0:3] = [50.0, -100.0, 20.0]
-    nominal_x0[6:10] = [0.9962, 0.0872, 0.0, 0.0]
+    nominal_x0[6:10] = [0.0872, 0.0, 0.0, 0.9962]
 
     dock_position = np.array([0.0, -5.0, 0.0])
 

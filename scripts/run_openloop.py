@@ -44,7 +44,7 @@ def main():
     # which requires vy0 = -2*n*x0 to prevent secular drift in y
     x0_pos = np.array([1000.0, 0.0, 500.0])           # r [m]
     x0_vel = np.array([0.0, -2 * n * x0_pos[0], 0.0]) # v [m/s]
-    q0 = np.array([1.0, 0.0, 0.0, 0.0])               # identity
+    q0 = np.array([0.0, 0.0, 0.0, 1.0])               # identity
     w0 = np.array([0.0, 0.01, 0.0])                   # small spin [rad/s]
     x0 = np.concatenate([x0_pos, x0_vel, q0, w0])
 

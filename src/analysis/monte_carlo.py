@@ -46,9 +46,9 @@ def sample_dispersed_x0(rng, nominal_x0,
     # a random 3D small-angle rotation (δθ) is converted into a delta-quaternion (δq) 
     # and multiplied onto the nominal orientation
     dtheta = rng.normal(0, np.deg2rad(att_std_deg), 3)
-    dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+    dq = np.array([0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2], 1.0])
     dq = quat_normalize(dq)
-    x0[6:10] = quat_normalize(quat_multiply(x0[6:10], dq))
+    x0[6:10] = quat_normalize(quat_multiply(dq, x0[6:10]))
 
     x0[10:13] += rng.normal(0, np.deg2rad(rate_std_dps), 3)
     return x0
@@ -85,9 +85,9 @@ def run_single(seed, nominal_x0, params, dock_position, t_end=3000.0, dt=1.0,
     x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
     x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
     dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
-    dq = np.array([1.0, 0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2]])
+    dq = np.array([0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2], 1.0])
     dq = quat_normalize(dq)
-    x0_est[6:10] = quat_normalize(quat_multiply(x0_est[6:10], dq))
+    x0_est[6:10] = quat_normalize(quat_multiply(dq, x0_est[6:10]))
 
     plant = Plant(params, x0_truth)
     actuators = Actuators(max_force=10.0, max_torque=5.0)
@@ -103,8 +103,7 @@ def run_single(seed, nominal_x0, params, dock_position, t_end=3000.0, dt=1.0,
     # Metrics
     truth = log["x_truth"]
     final_pos_err = np.linalg.norm(truth[-1, 0:3] - dock_position)
-    final_att_err = np.linalg.norm(quat_error(truth[-1, 6:10],
-                                              np.array([1, 0, 0, 0])))
+    final_att_err = np.linalg.norm(quat_error(truth[-1, 6:10], np.array([0, 0, 0, 1])))
     max_sat = log["saturated"].mean(axis=0).max()
     propellant = np.sum(np.abs(log["u_applied"][:, 0:3])) * dt
 

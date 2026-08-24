@@ -28,10 +28,10 @@ class PoseSensor:
         # because adding noise to quaternion components would break the norm
         # dθ = [dθx, dθy, dθz] small-angle error
         dtheta = self.rng.normal(0, self.att_noise_std, 3)
-        # dq = [cos(|dθ|/2), sin(|dθ|/2) * (dθ/|dθ|)] ≈ [1, 0.5*dθ] for small |dθ|
-        dq = np.array([1.0, 0.5 * dtheta[0], 0.5 * dtheta[1], 0.5 * dtheta[2]])
+        # dq = [sin(|dθ|/2) * (dθ/|dθ|), cos(|dθ|/2)] ≈ [0.5*dθ, 1] for small |dθ| (scalar-last)
+        dq = np.array([0.5 * dtheta[0], 0.5 * dtheta[1], 0.5 * dtheta[2], 1.0])
         dq = quat_normalize(dq) # don't forget to normalize again
-        z[6:10] = quat_normalize(quat_multiply(x_truth[6:10], dq))
+        z[6:10] = quat_normalize(quat_multiply(dq, x_truth[6:10]))
 
         return z
 
