@@ -15,6 +15,7 @@ def cw_state_space(n, mass):
     x = [x, y, z, vx, vy, vz] (state)
     u = [Fx, Fy, Fz] (input)
     A = (6,6), B = (6,3)
+    https://arxiv.org/pdf/1601.00042: pages 8-9
     """
     A = np.zeros((6, 6))
     # position derivatives = velocity
@@ -47,8 +48,8 @@ def attitude_state_space(inertia):
     u = [taux, tauy, tauz] (input)
     A = (6,6), B = (6,3)
 
-    Gyroscopic term w×Iw drops out when w~0, so the dynamics are linear:
-    I·w_dot ≈ tau, and dθ̇ ≈ w.
+    Euler's rigid body eqn -> drop w term (assuming w~0) -> linearize -> I·w_dot ≈ tau
+    also assume small dθ -> dθ̇ ≈ w
     """
     I_inv = np.linalg.inv(inertia)
 

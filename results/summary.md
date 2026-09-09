@@ -11,26 +11,23 @@ The LQR control-weight matrix R was swept across two orders of magnitude to
 characterize the convergence-vs-propellant tradeoff. Low R yields aggressive
 maneuvers that saturate thrusters and consume more propellant; high R conserves
 propellant at the cost of slower convergence. R = 10 was selected as the
-operating point that docks without sustained thruster saturation.
+operating point.
 ![FIG 2: LQR tradeoff curve](lqr_tuning.png)
 
 ### 3. MEKF Navigation
-A Multiplicative Extended Kalman Filter (MEKF) estimates the full 6-DOF
-relative state from noisy measurements, using a 12-dimensional error state
-with a 3-parameter small-angle attitude error (avoiding the singular
-covariance a 4-component quaternion would produce; attitude corrections are
+A Multiplicative Extended Kalman Filter (MEKF) estimates the relative state
+from noisy measurements, using a 12-dimensional error state with a
+3-parameter small-angle attitude error (avoiding the singular covariance
+a 4-component quaternion would produce; attitude corrections are
 injected multiplicatively).
 
-Steady-state estimation error, decomposed into signed components, confirms an
-unbiased filter that reduces noise below the sensor floor:
-
+Steady-state estimation error, decomposed into signed components:
 | Channel | Bias (mean) | Std (1σ) | Sensor 1σ | \|mean\|/std |
 |---|---|---|---|---|
 | Position [m] | ≤ 0.004 | 0.033 | 0.10 | ≤ 0.13 |
 | Velocity [m/s] | ≤ 4e-5 | 0.009 | 0.01 | ≤ 0.004 |
 | Attitude [deg] | ≤ 0.030 | 0.16 | 0.50 | ≤ 0.21 |
 | Rate [deg/s] | ≤ 0.0023 | 0.038 | 0.05 | ≤ 0.06 |
-
 All |mean|/std values are well below 0.3, confirming no systematic bias.
 Position error (0.033 m) and attitude error (0.16°) are reduced ~3× relative
 to raw sensor noise (0.10 m, 0.50°).
@@ -40,8 +37,7 @@ to raw sensor noise (0.10 m, 0.50°).
 ### 4. EKF Tuning
 The process-noise scale was swept across four orders of magnitude. Steady-state
 error increased monotonically with the scale factor; q_scale = 0.01 was
-selected as the operating point, and the filter remained stable across the
-entire sweep.
+selected as the operating point.
 
 | Q scale | Pos RMS [m] | Vel RMS [m/s] | Att RMS [deg] | Rate RMS [deg/s] |
 |---------|-------------|---------------|---------------|------------------|
@@ -75,14 +71,14 @@ noise seeds.
 - **Propellant-constrained:** The same runs, re-scored against a 5000-unit
   propellant budget, yielded 24.0% success. Propellant use averaged 7309 (max 19447)
   and thruster saturation reached 30.9% in the worst runs. Critically, final
-  position/attitude errors remained nominal in all runs — every failure was
-  propellant exhaustion, not loss of convergence. This isolates propellant and
-  control authority (not stability or estimation) as the bottleneck.
+  position/attitude errors remained nominal in all runs; every failure was
+  propellant exhaustion, not loss of convergence. This isolates propellant 
+  (not stability or estimation) as the bottleneck.
 ![FIG 6: Monte Carlo histograms](monte_carlo_results.png)
 
 
 ### 7. Robustness Envelope
-To identify *which* initial conditions are recoverable, a 16×16 grid
+To identify which initial conditions are recoverable, a 16×16 grid
 over initial position and velocity offsets was mapped against the 5000-unit
 propellant budget, yielding an overall recoverable fraction of **64.5%**.
 

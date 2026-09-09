@@ -7,7 +7,8 @@ import numpy as np
 
 def quat_multiply(q1, q2):
     """product q1 ⊗ q2. Composition matches DCM chaining:
-    R(q1 ⊗ q2) = R(q1) @ R(q2)."""
+    R(q1 ⊗ q2) = R(q1) @ R(q2).
+    Trawny & Roumeliotis: sec 1.2, eqn 9 """
     v1, w1 = q1[0:3], q1[3]
     v2, w2 = q2[0:3], q2[3]
     v = w1*v2 + w2*v1 - np.cross(v1, v2)
@@ -32,7 +33,8 @@ def quat_conjugate(q):
 
 
 def quat_to_rotmat(q):
-    """Rotation matrix such that v_body = R @ v_ref (passive, ref->body)"""
+    """Rotation matrix such that v_body = R @ v_ref (passive, ref->body).
+    B. Wie: eqn 5.36"""
     x, y, z, w = quat_normalize(q)
     R = np.array([
         [1 - 2*(y*y + z*z),     2*(x*y + w*z),     2*(x*z - w*y)],
@@ -44,23 +46,28 @@ def quat_to_rotmat(q):
 
 def quat_derivative(q, omega):
     """q̇ = 0.5 * [w, 0] ⊗ q (LEFT-multiplication). 
-    w is body-frame angular velocity (rad/s)."""
+    w is body-frame angular velocity (rad/s)
+    Trawny & Roumeliotis: eqn 106
+    """
     omega_quat = np.array([omega[0], omega[1], omega[2], 0.0])
     q_dot = 0.5 * quat_multiply(omega_quat, q)
     return q_dot
 
 
 def quat_error(q_est, q_ref):
-    """Attitude error as a small-angle 3-vector (rad)
-    Returns the vector part of (q_est ⊗ q_ref^-1), scaled by 2 for small angles."""
+    """Attitude error (rot diff) as a small-angle 3-vector
+    Returns the vector part of (q_est ⊗ q_ref^-1), scaled by 2 bc a quaternion
+    encodes rotation angle as a half-angle (δθ/2, not δθ).
+    """
     q_err = quat_multiply(q_est, quat_conjugate(q_ref))
-    if q_err[3] < 0:            # shortest rotation
+    if q_err[3] < 0:
         q_err = -q_err
-    return 2.0 * q_err[0:3]     # ~ [roll, pitch, yaw] error for small angles
+    return 2.0 * q_err[0:3]
 
 
 def quat_to_euler(q):
-    """3-2-1 intrinsic (roll-pitch-yaw, body-fixed axes) Euler angles (rad)"""
+    """3-2-1 intrinsic (roll-pitch-yaw, body-fixed axes) Euler angles (rad)
+    https://doi.org/10.1371/journal.pone.0276302 """
     x, y, z, w = quat_normalize(q)
     roll = np.arctan2(2*(w*x + y*z), 1 - 2*(x*x + y*y))
     sinp = 2*(w*y - z*x)

@@ -5,6 +5,8 @@ Error state δx (12):          [δr(3), δv(3), δθ(3), δω(3)]
 
 Covariance P is 12x12. Attitude error is a 3-element small-angle vector;
 corrections are injected multiplicatively into q_hat.
+
+following https://web.stanford.edu/group/arl/sites/default/files/public/publications/aas_13_364.pdf
 """
 
 import numpy as np
@@ -31,7 +33,7 @@ class MEKF:
         """
         self.params = params
         self.x = np.array(x0, dtype=float)
-        self.P = np.array(P0, dtype=float)   # how uncfertain we are after fusing zk
+        self.P = np.array(P0, dtype=float)   # how uncertain we are after fusing zk
         self.Q = np.array(Q, dtype=float)
         self.R = np.array(R, dtype=float)
 
@@ -39,17 +41,16 @@ class MEKF:
     def _inject(self, dx):
         """Apply a 12-dim error-state correction dx into the 13-dim full state.
         Additive for r, v, ω; multiplicative for attitude."""
-        self.x[0:3]   += dx[0:3]     # position: additive
+        self.x[0:3]   += dx[0:3]     # position: additive; eqn 61
         self.x[3:6]   += dx[3:6]     # velocity: additive
         self.x[10:13] += dx[9:12]     # angular rate: additive
 
-        # Attitude: multiplicative. dq ≈ [δθ/2, 1] (scalar-last), then q̂ = dq ⊗ q̂
+        # Attitude: multiplicative. dq ≈ [δθ/2, 1] (eqns 31 & 32)
         dtheta = dx[6:9]
         dq = np.array([0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2], 1.0])
         dq = quat_normalize(dq)
 
-        # q̂ = dq ⊗ q̂
-        # left-multiplication (JPL) injects the correction as a body-frame rotation
+        # q̂ = dq ⊗ q̂ (eqn 29)
         self.x[6:10] = quat_normalize(quat_multiply(dq, self.x[6:10]))
 
     def get_estimate(self):
@@ -84,7 +85,8 @@ class MEKF:
         if np.max(np.abs(F_c)) > 1e3:
             print(f"WARNING: large F_c entries, max={np.max(np.abs(F_c)):.3e}")
 
-        # 3. Discretize: F_d ≈ I + F_c * dt  (1st-order, assuming fast control rates)
+        # 3. Discretize: F_d ≈ I + F_c * dt  (assuming fast control rates)
+        # eqn 54 (1st order truncation from 53)
         F_d = np.eye(12) + F_c * dt
 
         # 4. Propagate covariance
@@ -170,19 +172,20 @@ class MEKF:
         #   H is partial derivative of predicted measurement wrt the error state = identity here
         # 2. measurement noise is additive in the error-state space
         #   J is partial derivative of the measurement equation wrt the measurement noise vector = identity here
-        H = np.eye(12)
-        S = H @ self.P @ H.T + self.R                  # (12,12)
+        H = np.eye(12)      # replaces eqn 63
+        S = H @ self.P @ H.T + self.R                  # (12,12); eqn 58
 
-        # Kalman gain
+        # Kalman gain (parallel to eqn 58)
         K = self.P @ H.T @ np.linalg.solve(S, np.eye(12))   # (12,12)
 
-        # Error-state correction
+        # Error-state correction (eqn 59)
         dx = K @ y                                     # (12,)
 
         # Inject correction into full state (multiplicative for attitude)
         self._inject(dx)
 
         # Covariance update; Joseph form for numerical stability (P stays symmetric)
+        # https://www.anuncommonlab.com/articles/how-kalman-filters-work/part2.html
         I_KH = np.eye(12) - K @ H
         self.P = I_KH @ self.P @ I_KH.T + K @ self.R @ K.T
 

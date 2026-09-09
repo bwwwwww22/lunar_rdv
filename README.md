@@ -1,27 +1,16 @@
 # Simplified 6-DOF SIL Simulator for Lunar Rendezvous & Docking
-A closed-loop 6-DOF SIL Python simulator for spacecraft proximity
-operations and docking in lunar orbit. Modular architecture isolates the
-vehicle physics plant from the GN&C flight software. Core focus: a
-Multiplicative Extended Kalman Filter (MEKF) for relative navigation and an
-LQR flight controller, validated via consistency testing and Monte Carlo
-robustness analysis.
-
-## Status
-- [x] 6-DOF plant (Clohessy–Wiltshire translation + quaternion attitude)
-- [x] LQR flight control (decoupled translation/attitude)
-- [x] Synthetic pose sensor
-- [x] LQR tuning (convergence vs. propellant tradeoff)
-- [x] MEKF navigation (w/ assumptions)
-- [x] MEKF tuning + NEES/NIS consistency validation
-- [x] Monte Carlo robustness + 2D recoverability envelope
-- [x] Off-nominal sensor scenario (measurement dropout)
+A closed-loop Python simulator for spacecraft proximity rendezvous
+and docking in lunar orbit. The architecture isolates the
+vehicle physics (plant) from the flight software (GN&C). A Multiplicative
+Extended Kalman Filter (MEKF) for relative navigation and an LQR
+flight controller, validated via consistency testing and Monte Carlo.
 
 ## Architecture
 
-A SIL boundary is enforced between the environment (truth) and the flight
-software (which sees only noisy sensor data):
-    PLANT (truth) → SENSOR (adds noise) → NAV (EKF estimate) → GUIDANCE (setpoint)
-      → CONTROL (LQR) → ACTUATORS (saturation) → PLANT (next step)
+A SIL boundary is enforced between the environment and the flight software
+(which sees only noisy sensor data):
+    PLANT (truth) → SENSOR (adds noise) → NAV (EKF estimate) → GUIDANCE (static 
+    setpoint) → CONTROL (LQR) → ACTUATORS (saturation) → PLANT (next step)
 
 - **Environment / plant** (`src/environment/`): 6-DOF physics. Never sees
   the controller's intent, only the post-saturation applied control.
@@ -55,7 +44,7 @@ attitude error. Corrections are injected multiplicatively into the quaternion.
 - **Translation:** Clohessy–Wiltshire equations, lunar mean motion
   `n = √(µ_moon / a³)` for a 100 km circular low lunar orbit. No atmospheric drag.
 - **Rotation:** rigid-body Euler equation `I·ω̇ = τ − ω×(I·ω)` with quaternion
-  kinematics `q̇ = ½ [ω, 0] ⊗ q` (JPL left-multiplication).
+  kinematics `q̇ = ½ [ω, 0] ⊗ q` (JPL convention).
 - **Integration:** fixed-step RK4
 
 ## Control

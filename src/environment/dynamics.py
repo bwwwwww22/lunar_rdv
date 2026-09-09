@@ -19,7 +19,9 @@ from src.utils.quaternions import quat_derivative
 
 def cw_acceleration(r, v, n):
     """Clohessy-Wiltshire relative acceleration (x, y and z double dot in textbook)
-    n = mean orbital rate [rad/s], x = radial, y = along-track, z = cross-track"""
+    n = mean orbital rate [rad/s], x = radial, y = along-track, z = cross-track.
+    B. Wie: eqns 4.88-4.90
+    """
     x, y, z = r
     vx, vy, vz = v
     ax = 3*n**2 * x + 2*n * vy  
@@ -29,7 +31,8 @@ def cw_acceleration(r, v, n):
 
 
 def rigid_body_acceleration(omega, tau, I, I_inv):
-    """Euler's equation: I·ω̇ = tau - ω × (I·ω), or ω̇ = I⁻¹ (tau - ω × (I·ω))."""
+    """Euler's equation: I·ω̇ = tau - ω x (I·ω), or ω̇ = I⁻¹ (tau - ω x (I·ω))
+    B. Wie: eqn 6.4 (I=J, tau=M)"""
     return I_inv @ (tau - np.cross(omega, I @ omega))
 
 
