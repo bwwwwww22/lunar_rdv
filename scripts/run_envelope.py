@@ -20,7 +20,7 @@ from src.analysis.monte_carlo import default_ekf_config
 from scripts.run_nominal import build_params
 
 PROPELLANT_BUDGET = 5000.0
-DATA_FILE = "../results/envelope_data.npz"
+DATA_FILE = "results/envelope_data.npz"
 
 def make_ic(nominal_x0, pos_offset, vel_offset):
     """Place the chaser pos_offset [m] further out along a fixed direction
@@ -132,7 +132,7 @@ def main():
     print("\n=== Envelope summary ===")
     print(f"Grid: {len(pos_offsets)} position x {len(vel_offsets)} velocity "
           f"= {n_total} cells")
-    print(f"Overall success fraction: {n_success/n_total*100:.1f}%")
+    print(f"Overall success fraction: {n_success/n_total*100:.1f}, {n_success} successes out of {n_total}")
     print(f"Propellant range: {prop_grid.min():.0f} to {prop_grid.max():.0f}")
 
     # For each velocity row, find the max position offset that still succeeds
@@ -180,7 +180,7 @@ def plot_envelope(pos_offsets, vel_offsets, prop_grid, succ_grid):
     axs[1].text(75, 4, "FAILED", color="k",ha="center", va="center", fontsize=8)
 
     plt.tight_layout()
-    plt.savefig("results/envelope_results_2.png", dpi=300, bbox_inches="tight")
+    #plt.savefig("results/envelope_results_2.png", dpi=300, bbox_inches="tight")
 
 if __name__ == "__main__":
     main()

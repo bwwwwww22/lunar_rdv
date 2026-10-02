@@ -28,6 +28,7 @@ Steady-state estimation error, decomposed into signed components:
 | Velocity [m/s] | ≤ 4e-5 | 0.009 | 0.01 | ≤ 0.004 |
 | Attitude [deg] | ≤ 0.030 | 0.16 | 0.50 | ≤ 0.21 |
 | Rate [deg/s] | ≤ 0.0023 | 0.038 | 0.05 | ≤ 0.06 |
+
 All |mean|/std values are well below 0.3, confirming no systematic bias.
 Position error (0.033 m) and attitude error (0.16°) are reduced ~3× relative
 to raw sensor noise (0.10 m, 0.50°).
