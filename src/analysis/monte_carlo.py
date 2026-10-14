@@ -5,7 +5,7 @@ performance statistics for robustness analysis."""
 import numpy as np
 from src.environment.plant import Plant
 from src.environment.actuators import Actuators
-from src.fsw.sensors import PoseSensor
+from src.fsw.sensors import LidarSensor, GyroSensor, StarTracker, SensorSuite
 from src.fsw.navigation import EKFNav
 from src.fsw.guidance import Guidance
 from src.fsw.control import LQRController
@@ -13,27 +13,84 @@ from src.sim.scheduler import Scheduler
 from src.sim.runner import SimRunner
 from src.utils.quaternions import quat_error, quat_multiply, quat_normalize
 
+# TODO: search for real numbers
+ARCSEC = np.deg2rad(1.0 / 3600.0)           # arcsec -> rad
+ARW_UNIT = np.deg2rad(1.0) / 60.0           # deg/sqrt(hr) -> rad/sqrt(s)
+RRW_UNIT = np.deg2rad(1.0) / 3600.0 / 60.0  # deg/hr/sqrt(hr) -> rad/s^1.5
+BIAS_UNIT = np.deg2rad(1.0) / 3600.0        # deg/hr -> rad/s
 
-def default_ekf_config():
+def default_sensor_config():
+    """Truth sensor noise (1-sigma). Currently use PLACEHOLDER values.
+    Single source of truth: builds the sensors AND sets the EKF's R, P0 and Q """
+    return {
+        # gyro
+        "arw": 0.5 * ARW_UNIT,            # rate noise sigma_rc [rad/sqrt(s)]
+        "rrw": 0.5 * RRW_UNIT,            # bias random walk sigma_wc [rad/s^1.5]
+        "bias0_std": 10.0 * BIAS_UNIT,    # turn-on bias [rad/s]
+        # star tracker
+        "star_cross": 2.0 * ARCSEC,       # [rad]
+        "star_bore": 10.0 * ARCSEC,       # [rad]
+        "star_hz": 1.0,
+        # lidar
+        "lidar_range": 0.1,               # [m]
+        "lidar_angle": np.deg2rad(0.1),   # azimuth & elevation [rad]
+        "lidar_hz": 1.0,
+    }
+
+def default_R(cfg=None):
+    """Per-sensor measurement covariances for the EKF
+    p.s. same sigmas that the sensors use """
+
+    cfg = cfg or default_sensor_config()
+    return {
+        "star": np.diag([cfg["star_cross"]**2, cfg["star_cross"]**2, 
+                         cfg["star_bore"]**2]),
+        "lidar": np.diag([cfg["lidar_range"]**2, cfg["lidar_angle"]**2, 
+                          cfg["lidar_angle"]**2]),
+    }
+
+def make_sensor_suite(dt, seed, cfg=None):
+    """Gyro + star tracker + lidar"""
+    cfg = cfg or default_sensor_config()
+    s_gyro, s_star, s_lidar = np.random.SeedSequence(seed).spawn(3)
+    return SensorSuite(
+        GyroSensor(cfg["arw"], cfg["rrw"], cfg["bias0_std"], 
+                   dt, seed=s_gyro),
+        StarTracker(cfg["star_cross"], cfg["star_bore"], cfg["star_hz"], 
+                    dt, seed=s_star),
+        LidarSensor(cfg["lidar_range"], cfg["lidar_angle"], cfg["lidar_hz"], 
+                    dt, seed=s_lidar),
+    )
+
+
+def default_ekf_config(cfg=None, q_trans_scale=1e-3):
+    """Error state [δr, δv, δθ, Δb]; Q is continuous (predict multiplies by dt).
+    q_trans_scale scales only the position/velocity blocks of Q: the deliberate margin
+    for unmodeled translational effects (chosen from tune_ekf.py). The gyro blocks come
+    from the sensor config and are never scaled. Pass 1.0 to get the unscaled baseline."""
+    cfg = cfg or default_sensor_config()
     P0 = np.diag([
         1.0, 1.0, 1.0,               # initial pos uncertainty (m^2)
         0.1, 0.1, 0.1,               # velocity  (m/s)^2
         np.deg2rad(5)**2,            # attitude (rad^2), ~5 deg 1-sigma
         np.deg2rad(5)**2,
         np.deg2rad(5)**2,
-        np.deg2rad(0.1)**2,          # angular rate (rad/s)^2
-        np.deg2rad(0.1)**2,
-        np.deg2rad(0.1)**2,
+        cfg["bias0_std"]**2,         # init bias uncertainty = turn-on bias var. since b_hat0 = 0
+        cfg["bias0_std"]**2,
+        cfg["bias0_std"]**2,
     ])
     Q = np.diag([
         1e-4, 1e-4, 1e-4,            # pos process noise
         1e-3, 1e-3, 1e-3,            # velocity
-        1e-6, 1e-6, 1e-6,            # attitude (small)
-        1e-6, 1e-6, 1e-6,            # angular rate
+        cfg["arw"]**2, cfg["arw"]**2, cfg["arw"]**2,   # gyro noise sigma_r^2
+        cfg["rrw"]**2, cfg["rrw"]**2, cfg["rrw"]**2,   # bias rand walk sigma_w^2
     ])
+    Q[0:6, 0:6] *= q_trans_scale
     return P0, Q
 
 
+# these stds disperse the TRUE initial state (how far off the chaser starts), which are
+# INDEPENDENT of sensor noise, which comes from default_sensor_config()
 def sample_dispersed_x0(rng, nominal_x0,
                         pos_std=50.0, vel_std=2.0, att_std_deg=30.0, rate_std_dps=1.0):
     """dispersed initial condition around a nominal x0 (drawn from Gaussian)"""
@@ -66,14 +123,10 @@ def run_single(seed, nominal_x0, params, dock_position, t_end=3000.0, dt=1.0,
     Q_att   = np.diag([10.0, 10.0, 10.0, 1.0, 1.0, 1.0])
     R_att   = np.diag([1.0, 1.0, 1.0]) * 100.0
 
-    pos_std, vel_std = 0.1, 0.01
-    att_std, rate_std = np.deg2rad(0.5), np.deg2rad(0.05)
-    R_ekf = np.diag(
-        [pos_std**2]*3 + [vel_std**2]*3 +
-        [att_std**2]*3 + [rate_std**2]*3
-    )
-
-    P0, Q_ekf = default_ekf_config()
+    # truth sensor noise and the matching EKF R/P0/Q (all from one config)
+    cfg = default_sensor_config()
+    R_ekf = default_R(cfg)
+    P0, Q_ekf = default_ekf_config(cfg)
 
     # Dispersed truth IC
     x0_truth = (sample_dispersed_x0(rng, nominal_x0) if disperse_ic
@@ -83,7 +136,7 @@ def run_single(seed, nominal_x0, params, dock_position, t_end=3000.0, dt=1.0,
     x0_est = x0_truth.copy()
     x0_est[0:3]   += np.array([1.0, -1.0, 1.0])
     x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
-    x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
+    x0_est[10:13] = 0.0   # filter state 10:13 hold the b_hat (gyro bias est.), not w
     dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
     dq = np.array([0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2], 1.0])
     dq = quat_normalize(dq)
@@ -91,7 +144,7 @@ def run_single(seed, nominal_x0, params, dock_position, t_end=3000.0, dt=1.0,
 
     plant = Plant(params, x0_truth)
     actuators = Actuators(max_force=10.0, max_torque=5.0)
-    sensor = PoseSensor(pos_std, vel_std, att_std, rate_std, seed=seed + 1)
+    sensor = make_sensor_suite(dt, seed + 1, cfg)
     nav = EKFNav(params, x0_est, P0, Q_ekf, R_ekf)
     guidance = Guidance(dock_position=dock_position)
     controller = LQRController(params, Q_trans, R_trans, Q_att, R_att)
@@ -145,7 +198,10 @@ def summarize(results):
     sats     = np.array([r["max_sat_fraction"] for r in results])
     succ     = np.array([r["success"] for r in results])
 
-    print(f"Success rate: {succ.mean()*100:.1f}%")
+    # convergence-only success (position < 1 m and attitude < 5 deg), ignoring the propellant budget
+    conv = (pos_errs < 1.0) & (att_errs < 5.0)
+    print(f"Success rate, no propellant constraint: {conv.mean()*100:.1f}%")
+    print(f"Success rate, within propellant budget: {succ.mean()*100:.1f}%")
     print(f"Final position error [m]:  mean={pos_errs.mean():.3f}, "
           f"95th={np.percentile(pos_errs, 95):.3f}, max={pos_errs.max():.3f}")
     print(f"Final attitude error [deg]: mean={att_errs.mean():.3f}, "

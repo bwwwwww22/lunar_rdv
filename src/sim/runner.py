@@ -24,6 +24,8 @@ class SimRunner:
             "u_cmd": np.zeros((n_steps + 1, 6)),       # controller's intent (6d: force/torque)
             "u_applied": np.zeros((n_steps + 1, 6)),   # what's actually delivered post-saturation (actuators)
             "saturated": np.zeros((n_steps + 1, 6), dtype=bool),
+            "b_hat": np.zeros((n_steps + 1, 3)),       # gyro-bias estimate (nav provides it)
+            "b_true": np.zeros((n_steps + 1, 3)),      # true gyro bias (if sensor has it)
         }
 
         # init
@@ -59,9 +61,20 @@ class SimRunner:
             idx = k + 1
             log["t"][idx] = t + dt
             log["x_truth"][idx] = self.plant.get_state()
-            log["x_est"][idx] = x_est
+            log["x_est"][k] = x_est   # shouldn't be at t_k+1 (like x_truth[k])
             log["x_ref"][idx] = x_ref
             log["u_cmd"][idx] = u_cmd
             log["u_applied"][idx] = u_applied
             log["saturated"][idx] = self.actuators.is_saturated(u_cmd)
+            if hasattr(self.nav, "get_filter_state"):
+                log["b_hat"][k] = self.nav.get_filter_state()[10:13] # shouldn't be at t_k+1
+            if hasattr(self.sensor, "gyro"):
+                log["b_true"][k] = self.sensor.gyro.bias  # shouldn't be at t_k+1
+
+        # no measurement at t_n, so hold the last estimate for the final sample
+        log["x_est"][n_steps] = x_est
+        if hasattr(self.nav, "get_filter_state"):
+            log["b_hat"][n_steps] = self.nav.get_filter_state()[10:13]
+        if hasattr(self.sensor, "gyro"):
+            log["b_true"][n_steps] = self.sensor.gyro.bias
         return log

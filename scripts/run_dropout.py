@@ -1,26 +1,27 @@
 """Off-nominal scenario: sensor dropout during docking. 
 
 During the dropout window the MEKF runs predict-only (no measurement update);
-covariance grows and the estimate coasts on the dynamics model. Demonstrates 
-recovery rather than divergence."""
+covariance grows; translation coasts on CW + cmd force and attitude on the
+bias-corrected gyro (star tracker & lidar dropout, the gyro stays on). """
 
 import numpy as np
 import matplotlib.pyplot as plt
 
 from src.environment.plant import Plant
 from src.environment.actuators import Actuators
-from src.fsw.sensors import PoseSensor, DropoutSensor
+from src.fsw.sensors import DropoutSensor
 from src.fsw.navigation import EKFNav
 from src.fsw.guidance import Guidance
 from src.fsw.control import LQRController
 from src.sim.scheduler import Scheduler
 from src.sim.runner import SimRunner
 from src.utils.quaternions import quat_error
-from src.analysis.monte_carlo import default_ekf_config
-from scripts.run_nominal import build_params
+from scripts.run_openloop import build_params
+from src.utils.quaternions import quat_multiply, quat_normalize
+from src.analysis.monte_carlo import (default_sensor_config, default_R,
+        make_sensor_suite, default_ekf_config)
 
-
-def run_with_dropout(dropout_windows, t_end=3000.0, dt=1.0, seed=42):
+def run_with_dropout(dropout_windows, drop=("star", "lidar"), t_end=3000.0, dt=1.0, seed=42):
     params = build_params()
 
     Q_trans = np.diag([1.0]*3 + [0.1]*3)
@@ -28,11 +29,10 @@ def run_with_dropout(dropout_windows, t_end=3000.0, dt=1.0, seed=42):
     Q_att   = np.diag([10.0]*3 + [1.0]*3)
     R_att   = np.eye(3) * 100.0
 
-    pos_std, vel_std = 0.1, 0.01
-    att_std, rate_std = np.deg2rad(0.5), np.deg2rad(0.05)
-    R_ekf = np.diag([pos_std**2]*3 + [vel_std**2]*3 +
-                    [att_std**2]*3 + [rate_std**2]*3)
-    P0, Q_ekf = default_ekf_config()
+    # truth sensor noise and the matching EKF R/P0/Q (all from one config)
+    cfg = default_sensor_config()
+    R_ekf = default_R(cfg)
+    P0, Q_ekf = default_ekf_config(cfg)
 
     x0 = np.zeros(13)
     x0[0:3] = [50.0, -100.0, 20.0]
@@ -41,8 +41,16 @@ def run_with_dropout(dropout_windows, t_end=3000.0, dt=1.0, seed=42):
 
     plant = Plant(params, x0)
     actuators = Actuators(max_force=10.0, max_torque=5.0)
-    base_sensor = PoseSensor(pos_std, vel_std, att_std, rate_std, seed=seed)
-    sensor = DropoutSensor(base_sensor, dropout_windows, dt=dt)
+
+    sensor = make_sensor_suite(dt, seed, cfg)
+    # Drop only star tracker & lidar. Gyro keeps running because it
+    # drives predict, w/o it there'd be nothing to propagate attitude with
+    ##sensor.star = DropoutSensor(sensor.star, dropout_windows, dt=dt)
+    ##sensor.lidar = DropoutSensor(sensor.lidar, dropout_windows, dt=dt)
+    if isinstance(drop, str):
+        drop = (drop,)
+    for name in drop:
+        setattr(sensor, name, DropoutSensor(getattr(sensor, name), dropout_windows, dt=dt))
 
     x0_est = x0.copy()
     #x0_est[0:3] += [0.5, -0.5, 0.3]
@@ -50,11 +58,10 @@ def run_with_dropout(dropout_windows, t_end=3000.0, dt=1.0, seed=42):
     x0_est[0:3]   += np.array([1.0, -1.0, 1.0])
     # Velocity: 0.316 m/s per axis (matches P0 = 0.1 (m/s)²)
     x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
-    # Angular rate: 0.1 deg/s per axis (matches P0 = deg2rad(0.1)²)
-    x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
+    x0_est[10:13] = 0.0   # filter state 10:13 hold the b_hat (gyro bias est.), not w
+
     # Attitude: 5 deg per axis (matches P0 = deg2rad(5)²)
-    # Apply MULTIPLICATIVELY (not additively — attitude trap)
-    from src.utils.quaternions import quat_multiply, quat_normalize
+    # Apply MULTIPLICATIVELY
     dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
     dq = np.array([0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2], 1.0])
     dq = quat_normalize(dq)
@@ -98,8 +105,10 @@ def plot_comparison(results_list, figure_title, figure_name):
         label = res["label"]
         windows = res["dropout_windows"]
 
-        t = log["t"]
-        truth, est = log["x_truth"], log["x_est"]
+        ## old: the runner never fills x_est[0] (zeros), so skip the first sample
+        s = slice(0,None) #1, None)
+        t = log["t"][s]
+        truth, est = log["x_truth"][s], log["x_est"][s]
 
         pos_err = np.linalg.norm(est[:, 0:3] - truth[:, 0:3], axis=1)
         att_err = np.rad2deg(np.array([
@@ -122,19 +131,18 @@ def plot_comparison(results_list, figure_title, figure_name):
     for ax in axs[-1]: ax.set_xlabel("Time [s]")
     for ax in axs.flat: ax.set_box_aspect(1.0)
 
-    #plt.show()
     plt.savefig(figure_name, dpi=300, bbox_inches="tight")
 
 def main():
     # ---Scenario 1: Varying Durations from a Fixed Start Time---
     print("\n--- Running Varying Duration Sweep ---")
-    start_time = 1000.0
-    durations = [300, 600, 1000, 1500, 2000]
+    start_time = 30 #1000.0
+    durations = [300, 1000, 2000, 2500, 3000]
     duration_results = []
 
     for duration in durations:
         dropout_windows = [(start_time, start_time + duration)]
-        log, dock = run_with_dropout(dropout_windows)
+        log, dock = run_with_dropout(dropout_windows, drop=("lidar"))
         
         # Calculate summary metrics
         truth = log["x_truth"]
@@ -153,17 +161,19 @@ def main():
         })
     plot_comparison(duration_results, 
                     figure_title="EKF Estimation Error Across Various Dropout Durations",
-                    figure_name="results/dropout_durations.png")
+                    figure_name="results/dropout_durations_dropslidar.png")
 
 
-    #---Scenario 2: Varying Start Times & Durations---
-    print("\n--- Running Varying Start & Duration Combinations ---")
-    combo_windows = [(1000, 1500), (1000, 1800), (500, 1500), (500, 2000)]
+    #---Scenario 2: Varying Start Times---
+    print("\n--- Running Varying Start Times---")
+    #combo_windows = [(500, 1500), (500, 2000), (1000, 1500), (1000, 2000)]
+    dur = 2000
+    combo_windows = [(s, dur) for s in (500, 750, 900, 950, 1000)]
     combo_results = []
 
     for start, duration in combo_windows:
         dropout_windows = [(float(start), float(start + duration))]
-        log, dock = run_with_dropout(dropout_windows)
+        log, dock = run_with_dropout(dropout_windows, drop=("lidar"))
 
         truth = log["x_truth"]
         fpe = np.linalg.norm(truth[-1, 0:3] - dock)
@@ -181,8 +191,8 @@ def main():
         })
 
     plot_comparison(combo_results, 
-                    figure_title="EKF Estimation Error Across Start/Duration Combinations", 
-                    figure_name="results/dropout_start_duration.png")
+                    figure_title="EKF Estimation Error Across Various Dropout Start Times", 
+                    figure_name="results/dropout_start_droplidar.png")
 
 
 if __name__ == "__main__":

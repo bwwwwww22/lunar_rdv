@@ -5,56 +5,30 @@ import matplotlib.pyplot as plt
 
 from src.environment.plant import Plant
 from src.environment.actuators import Actuators
-from src.fsw.sensors import PoseSensor
 from src.fsw.navigation import EKFNav
 from src.fsw.guidance import Guidance
 from src.fsw.control import LQRController
 from src.sim.scheduler import Scheduler
 from src.sim.runner import SimRunner
 from scripts.run_openloop import build_params
-from src.utils.quaternions import quat_multiply, quat_normalize
+from src.utils.quaternions import quat_error, quat_multiply, quat_normalize
+from src.analysis.monte_carlo import (default_sensor_config, default_R,
+        make_sensor_suite, default_ekf_config)
 
 def main():
     params = build_params()
-
-    # --- LQR tuning matrices
-    # arbitrary values but this Q setting (penalizes state error) has position weighted 
-    # 10× more than velocity, meaningwe we care more about being at the dock
-    # than about the exact speed
-    Q_trans = np.diag([1.0, 1.0, 1.0,    # position error (x,y,z)
-                       0.1, 0.1, 0.1])   # velocity error (vx,vy,vz)
-    R_trans = np.diag([1.0, 1.0, 1.0]) * 10.0    # thrust cost; bigger = stingier with fuel
+        
+    # LQR (fixed)
+    Q_trans = np.diag([1.0, 1.0, 1.0, 
+                        0.1, 0.1, 0.1])
+    R_trans = np.diag([1.0, 1.0, 1.0]) * 10.0 
     Q_att   = np.diag([10.0, 10.0, 10.0, 1.0, 1.0, 1.0])
-    R_att   = np.diag([1.0, 1.0, 1.0]) * 100.0   # make using torque very expensive
+    R_att   = np.diag([1.0, 1.0, 1.0]) * 100.0
 
-    # --- EKF tuning, [δr(3), δv(3), δθ(3), δω(3)]
-    # sort of arbitrary, but i assume moderate spatial error, tighter confidence in
-    # initial angular rate, looser on initial attitude
-    # The process noise is set to be small for position and attitude, and larger
-    # for velocity and angular rate, which are the primary channels of uncertainty.
-    P0 = np.diag([
-        1.0, 1.0, 1.0,               # initial pos uncertainty (m^2)
-        0.1, 0.1, 0.1,               # velocity  (m/s)^2
-        np.deg2rad(5)**2,            # attitude (rad^2), ~5 deg 1-sigma
-        np.deg2rad(5)**2,
-        np.deg2rad(5)**2,
-        np.deg2rad(0.1)**2,          # angular rate (rad/s)^2
-        np.deg2rad(0.1)**2,
-        np.deg2rad(0.1)**2,
-    ])
-    Q_ekf = np.diag([
-        1e-4, 1e-4, 1e-4,            # pos process noise
-        1e-3, 1e-3, 1e-3,            # velocity
-        1e-6, 1e-6, 1e-6,            # attitude (small)
-        1e-6, 1e-6, 1e-6,            # angular rate
-    ])
-    # R matches the sensor noise set below
-    pos_std, vel_std = 0.1, 0.01
-    att_std, rate_std = np.deg2rad(0.5), np.deg2rad(0.05)
-    R_ekf = np.diag([
-        pos_std**2]*3 + [vel_std**2]*3 +
-        [att_std**2]*3 + [rate_std**2]*3
-    )
+    # truth sensor noise and the matching EKF R/P0/Q (all from one config)
+    cfg = default_sensor_config()
+    R_ekf = default_R(cfg)
+    P0, Q_ekf = default_ekf_config(cfg)
     
     # --- Initial condition: chaser offset from dock, small attitude error
     x0 = np.zeros(13)
@@ -77,25 +51,24 @@ def main():
     x0_est[0:3]   += np.array([1.0, -1.0, 1.0])
     # Velocity: 0.316 m/s per axis (matches P0 = 0.1 (m/s)²)
     x0_est[3:6]   += np.array([0.316, -0.316, 0.316])
-    # Angular rate: 0.1 deg/s per axis (matches P0 = deg2rad(0.1)²)
-    x0_est[10:13] += np.deg2rad(np.array([0.1, -0.1, 0.1]))
+    x0_est[10:13] = 0.0   # filter state 10:13 hold the b_hat (gyro bias est.), not w
 
     # Attitude: 5 deg per axis (matches P0 = deg2rad(5)²)
-    # Apply MULTIPLICATIVELY (not additively — attitude trap)
+    # Apply MULTIPLICATIVELY
     dtheta = np.deg2rad(np.array([5.0, -5.0, 5.0]))
     dq = np.array([0.5*dtheta[0], 0.5*dtheta[1], 0.5*dtheta[2], 1.0])
     dq = quat_normalize(dq)
     x0_est[6:10] = quat_normalize(quat_multiply(dq, x0_est[6:10]))
-
+    
     plant = Plant(params, x0)
     actuators = Actuators(max_force=10.0, max_torque=5.0)
-    sensor = PoseSensor(pos_noise_std=pos_std, vel_noise_std=vel_std,
-                        att_noise_std=att_std,
-                        rate_noise_std=rate_std, seed=42)
+    seed = 42
+    dt = 1.0
+    sensor = make_sensor_suite(dt, seed, cfg)
     nav = EKFNav(params, x0_est, P0, Q_ekf, R_ekf)
     guidance = Guidance(dock_position=dock_position)
     controller = LQRController(params, Q_trans, R_trans, Q_att, R_att)
-    scheduler = Scheduler(dt=1.0)
+    scheduler = Scheduler(dt=dt)
 
     sim = SimRunner(plant, sensor, nav, guidance, controller, actuators, scheduler)
 
@@ -107,32 +80,45 @@ def main():
 
 
 def plot_ekf_performance(log):
-    t = log["t"]
-    truth = log["x_truth"]
-    est = log["x_est"]
+    # old:the runner never fills est[0] (zeros), so drop the first sample;
+    # otherwise t=0 shows a weird, large "error"
+    s = slice(0,None) #1, None)
+    t = log["t"][s]
+    truth = log["x_truth"][s]
+    est = log["x_est"][s]
+    b_hat, b_true = log["b_hat"][s], log["b_true"][s]
 
-    # --- Estimation error over time ---
+    # Estimation error over time
     pos_err = np.linalg.norm(est[:, 0:3] - truth[:, 0:3], axis=1)
     vel_err = np.linalg.norm(est[:, 3:6] - truth[:, 3:6], axis=1)
-    rate_err = np.linalg.norm(est[:, 10:13] - truth[:, 10:13], axis=1)
 
     # Attitude error via quaternion residual (small-angle vector norm
-    from src.utils.quaternions import quat_error
     att_err = np.array([
         np.linalg.norm(quat_error(est[k, 6:10], truth[k, 6:10]))
         for k in range(len(t))
     ])
 
-    fig, axs = plt.subplots(5, 1, figsize=(9, 9), sharex=True, tight_layout=True)
-    axs[0].plot(t, pos_err);              axs[0].set_ylabel("‖pos err‖ [m]")
-    axs[1].plot(t, vel_err);              axs[1].set_ylabel("‖vel err‖ [m/s]")
-    axs[2].plot(t, np.rad2deg(att_err));  axs[2].set_ylabel("‖att err‖ [deg]")
-    axs[3].plot(t, np.rad2deg(rate_err)); axs[3].set_ylabel("‖ω err‖ [deg/s]")
-    for ax in axs[:4]: ax.set_xlabel("time [s]")
+    fig, axs = plt.subplots(5, 1, figsize=(9, 10), sharex=True, tight_layout=True)
+    axs[0].semilogy(t, pos_err)
+    axs[0].set_ylabel("‖pos err‖ [m]")             
+    axs[1].semilogy(t, vel_err)
+    axs[1].set_ylabel("‖vel err‖ [m/s]")
+    axs[2].semilogy(t, np.rad2deg(att_err))
+    axs[2].set_ylabel("‖att err‖ [deg]")
+
+    # gyro bias: est vs truth (dashed) per axis
+    # This replaces the old omega-error panel: w_hat = w_m - b_hat
+    # is unfiltered, so its error is just gyro noise
+    to_deg_hr = 180 / np.pi * 3600
+    for i, axis in enumerate("xyz"):
+        axs[3].plot(t, b_true[:, i] * to_deg_hr, "--", color=f"C{i}")
+        axs[3].plot(t, b_hat[:, i] * to_deg_hr, color=f"C{i}", label=f"b_{axis}")
+    axs[3].set_ylabel("gyro bias [deg/hr]")
+    axs[3].legend(ncols=3, title="solid = estimate, dashed = truth")
     for ax in axs: ax.set_xlim([0, 3000])
     fig.suptitle("EKF estimation error vs truth")
 
-    # --- Docking convergence (same as Week 1 plot, sanity check) ---
+    # Docking convergence
     ax = axs[4]
     ax.plot(t, truth[:, 0], label="radial x")
     ax.plot(t, truth[:, 1], label="along-track y")
@@ -143,6 +129,14 @@ def plot_ekf_performance(log):
 
     plt.savefig("results/ekf_nominal.png", dpi=300, bbox_inches="tight")
     #plt.show()
+
+    # dignose the 'bump' in pos/vel error
+    unshifted = np.linalg.norm(log["x_est"][1:, 0:3] - log["x_truth"][1:, 0:3], axis=1)
+    shifted = np.linalg.norm(log["x_est"][1:, 0:3] - log["x_truth"][:-1, 0:3], axis=1)
+    w = slice(30, 90)       # around the ~50 s bump
+    print(unshifted[w].max(), shifted[w].max())
+    print(shifted[:200].argmax())   # where does the 0.427 come from?
+
 
 def print_error_stats(log):
     """Print signed estimation error statistics per channel. Bias (mean)
@@ -155,7 +149,7 @@ def print_error_stats(log):
     # Signed errors per channel
     err_pos  = est[ss, 0:3]   - truth[ss, 0:3]
     err_vel  = est[ss, 3:6]   - truth[ss, 3:6]
-    err_rate = est[ss, 10:13] - truth[ss, 10:13]
+    err_bias = log["b_hat"][ss] - log["b_true"][ss]   # b_hat - b (same sign convention as pos/vel/att above)
     err_att  = np.array([quat_error(est[k, 6:10], truth[k, 6:10]) for k in range(len(truth))])[ss]
 
     def report(name, err, unit_scale=1.0, unit=""):
@@ -170,7 +164,7 @@ def print_error_stats(log):
     report("Position [m]",    err_pos)
     report("Velocity [m/s]",  err_vel)
     report("Attitude [deg]",  err_att,  unit_scale=180/np.pi, unit="deg")
-    report("Rate [deg/s]",    err_rate, unit_scale=180/np.pi, unit="deg/s")
+    report("Gyro bias [deg/hr]", err_bias, unit_scale=180/np.pi*3600, unit="deg/hr")
 
 
 if __name__ == "__main__":

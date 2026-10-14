@@ -7,7 +7,8 @@ confidence) matches its actual error statistics.
    should be ~ dim(state)
 2. NIS  = y^T S^-1 y
    measures how well S models the sensor measurement residual or innovation, y
-   should be ~ dim(measurement)
+   should be ~ dim(measurement); with sequential updates, check it per sensor
+   (3 for the star tracker, 3 for the lidar)
 Here NEES ≈ 12 consistent; > 12 overconfident (dangerous); < 12 underconfident (safe)
 """
 
@@ -16,19 +17,25 @@ from scipy.stats import chi2
 from src.utils.quaternions import quat_error
 
 
-def compute_error_state(x_truth, x_est):
-    """12-dim error state between truth and estimate at a single timestep."""
+def compute_error_state(x_truth, b_true, x_est):
+    """12-dim error state [δr, δv, δθ, Δb] between truth and est. at a single timestep
+    x_truth : truth state (13,)
+    b_true  : true gyro bias (3,)
+    x_est   : filter state [r, v, q, b_hat] from ekf.get_filter_state(),
+              not get_estimate() (that one holds w_hat in slots 10:13) """
     dx = np.zeros(12)
     dx[0:3] = x_truth[0:3] - x_est[0:3]
     dx[3:6] = x_truth[3:6] - x_est[3:6]
     dx[6:9] = quat_error(x_truth[6:10], x_est[6:10])
-    dx[9:12] = x_truth[10:13] - x_est[10:13]
+    dx[9:12] = b_true - x_est[10:13]  # truth - b_hat
+    # P.S. x_truth[10:13] is the true angular velocity and
+    # b_true is the gyro bias, and NEES doesn't use x_truth[10:13]
     return dx
 
 
-def nees(x_truth, x_est, P):
+def nees(x_truth, b_true, x_est, P):
     """Normalized estimation error squared (at one timestep)"""
-    dx = compute_error_state(x_truth, x_est)
+    dx = compute_error_state(x_truth, b_true, x_est)
     return float(dx @ np.linalg.solve(P, dx))
 
 def nis(y, S):
