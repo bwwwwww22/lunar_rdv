@@ -203,9 +203,15 @@ Tabulated are final position & attitude errors.
 
 Caveat: single seed. Position coasts well through outages because the filter's CW model and commanded force match the plant exactly. Real thruster or environment errors would degrade the coast, so the translation results are optimistic.
 
+Both sensors out, varying duration
 ![FIG 8a: both sensors out, varying duration](dropout_durations.png)
+Both sensors out, varying start time
 ![FIG 8b: both sensors out, varying start](dropout_start.png)
+Only star tracker out, varying duration
 ![FIG 8c: star tracker only out, varying duration](dropout_durations_dropstar.png)
+Only star tracker out, varying start time
 ![FIG 8d: star tracker only out, varying start](dropout_start_dropstar.png)
+Only lidar out, varying duration
 ![FIG 8e: lidar only out, varying duration](dropout_durations_dropslidar.png)
+Only lidar out, varying start time
 ![FIG 8f: lidar only out, varying start](dropout_start_droplidar.png)

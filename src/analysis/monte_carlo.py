@@ -20,19 +20,20 @@ RRW_UNIT = np.deg2rad(1.0) / 3600.0 / 60.0  # deg/hr/sqrt(hr) -> rad/s^1.5
 BIAS_UNIT = np.deg2rad(1.0) / 3600.0        # deg/hr -> rad/s
 
 def default_sensor_config():
-    """Truth sensor noise (1-sigma). Currently use PLACEHOLDER values.
+    """Truth sensor noise (1-sigma). Gyro and star tracker use vendor-based values;
+    the lidar is still a PLACEHOLDER (no verified datasheet number found).
     Single source of truth: builds the sensors AND sets the EKF's R, P0 and Q """
     return {
-        # gyro
+        # gyro: Honeywell HG1700-AG62 (via NovAtel docs): ARW 0.5 deg/sqrt(hr), bias 5 deg/hr
         "arw": 0.5 * ARW_UNIT,            # rate noise sigma_rc [rad/sqrt(s)]
-        "rrw": 0.5 * RRW_UNIT,            # bias random walk sigma_wc [rad/s^1.5]
-        "bias0_std": 10.0 * BIAS_UNIT,    # turn-on bias [rad/s]
-        # star tracker
-        "star_cross": 2.0 * ARCSEC,       # [rad]
-        "star_bore": 10.0 * ARCSEC,       # [rad]
+        "rrw": 0.5 * RRW_UNIT,            # bias random walk sigma_wc [rad/s^1.5] (ASSUMED, not in datasheets)
+        "bias0_std": 5.0 * BIAS_UNIT,     # turn-on bias [rad/s]
+        # star tracker: Sodern Hydra (datasheet 3-sigma values / 3); noise only, no 11" bias
+        "star_cross": 0.3 * ARCSEC,       # [rad] (NEA <0.8"/rtHz and 0.6" spatial, 3-sigma)
+        "star_bore": 1.5 * ARCSEC,        # [rad] (4.6" low-freq spatial, 3-sigma)
         "star_hz": 1.0,
-        # lidar
-        "lidar_range": 0.1,               # [m]
+        # lidar: range from Neptec OPAL P-Series precision (<2.0 cm typical); angle (0.1 deg ~ 1 cm at 5 m, conservative) is ASSUMED, not in the datasheet
+        "lidar_range": 0.02,              # [m]
         "lidar_angle": np.deg2rad(0.1),   # azimuth & elevation [rad]
         "lidar_hz": 1.0,
     }
